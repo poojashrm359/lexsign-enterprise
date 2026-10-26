@@ -4,3 +4,5 @@ motor
 pymongo
 pydantic
 python-multipart
+pandas
+openpyxl
