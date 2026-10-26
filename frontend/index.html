@@ -434,7 +434,6 @@
     </div>
 
     <script>
-        const API_URL = "http://localhost:8000";
         let currentUser = null;
         let currentCauseList = [];
         let scrollInterval = null;
@@ -450,7 +449,7 @@
             if (field.type === 'password') { field.type = 'text'; iconElem.innerText = '🙈'; }
             else { field.type = 'password'; iconElem.innerText = '👁️'; }
         }
-
+        const API_URL = window.location.origin;
         async function handleLogin() {
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
