@@ -45,6 +45,12 @@ async def ensure_halls():
         if backfill:
             await db.benches.update_one({"bench_id": bench_id}, {"$set": backfill})
 
+    # "Risen" and "Lunch Recess" states were removed; put any hall still in them back in session
+    await db.benches.update_many(
+        {"state": {"$regex": "risen|lunch|recess", "$options": "i"}},
+        {"$set": {"state": "In Session"}},
+    )
+
 
 async def seed_database():
     try:

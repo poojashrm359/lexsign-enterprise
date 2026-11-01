@@ -201,8 +201,6 @@ body.kiosk-mode #busyOverlay { display: none !important; }
                         <span style="font-size:11px; color:#9ca3af; display:block; margin-bottom:4px;">BENCH STATE</span>
                         <div style="display:flex; gap:6px;">
                             <button class="status-pill active" onclick="setBenchState('In Session')">In Session</button>
-                            <button class="status-pill" onclick="setBenchState('Risen')">Risen (15m)</button>
-                            <button class="status-pill" onclick="setBenchState('Lunch Recess')">Lunch Recess</button>
                             <button class="status-pill" onclick="setBenchState('Adjourned')">Adjourned Day</button>
                         </div>
                     </div>
@@ -693,11 +691,8 @@ body.kiosk-mode #busyOverlay { display: none !important; }
             const btnText = btn.innerText.toLowerCase();
             const dbState = (b.state || 'In Session').toLowerCase();
             
-            // Match states accurately across variations like "Risen (15m)" vs "Risen"
             if (
                 (dbState.includes('session') && btnText.includes('session')) ||
-                (dbState.includes('risen') && btnText.includes('risen')) ||
-                (dbState.includes('recess') && btnText.includes('recess')) ||
                 (dbState.includes('adjourned') && btnText.includes('adjourned'))
             ) {
                 btn.classList.add('active');
@@ -991,13 +986,7 @@ body.kiosk-mode #busyOverlay { display: none !important; }
     const activeContainer = document.getElementById('outsideActiveCase');
     const stateStr = (bench.state || '').toLowerCase();
 
-    if (stateStr.includes('lunch')) {
-        activeContainer.style.color = 'var(--gold)';
-        activeContainer.innerText = "🍽️ LUNCH RECESS — PROCEEDINGS RESUME AT 2:00 PM";
-    } else if (stateStr.includes('risen')) {
-        activeContainer.style.color = 'var(--purple)';
-        activeContainer.innerText = "⏳ COURT RISEN BRIEFLY — PROCEEDINGS RESUME SHORTLY";
-    } else if (stateStr.includes('adjourned')) {
+    if (stateStr.includes('adjourned')) {
         activeContainer.style.color = 'var(--red)';
         activeContainer.innerText = "🛑 BOARD CONCLUDED / ADJOURNED FOR THE DAY";
     } else {
@@ -1064,9 +1053,7 @@ async function loadMasterConsolidatedData() {
         let displayHeader = b.active_case ? b.active_case : 'No Active Matter';
         const stateStr = (b.state || '').toLowerCase();
         
-        if (stateStr.includes('lunch')) displayHeader = "🍽️ Lunch Recess";
-        else if (stateStr.includes('risen')) displayHeader = "⏳ Court Risen";
-        else if (stateStr.includes('adjourned')) displayHeader = "🛑 Adjourned Day";
+        if (stateStr.includes('adjourned')) displayHeader = "🛑 Adjourned Day";
 
         // 🔔 Check if any Bench called a NEW matter on Master Display
         if (b.active_case && lastMasterActiveCases[b.bench_id] !== b.active_case) {
@@ -1196,10 +1183,7 @@ function startAutoScroll() {
         // Render Hall Cards
         html += `<div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 15px;">`;
         benches.forEach(b => {
-            let badgeClass = "badge-hearing";
-            const stateStr = (b.state || '').toLowerCase();
-            if (stateStr.includes('lunch')) badgeClass = "badge-adj";
-            else if (stateStr.includes('risen')) badgeClass = "badge-passed";
+            const badgeClass = "badge-hearing";
 
             html += `<div style="background:#070a13; padding:18px; border-radius:8px; border:1px solid var(--border);">
                 <h3 style="color:var(--gold); margin:0;">${hallLabel(b)}</h3>
@@ -1318,13 +1302,7 @@ async function loadDisplayData() {
     const activeContainer = document.getElementById('outsideActiveCase');
     const stateStr = (bench.state || '').toLowerCase();
 
-    if (stateStr.includes('lunch')) {
-        activeContainer.style.color = 'var(--gold)';
-        activeContainer.innerText = "🍽️ LUNCH RECESS — PROCEEDINGS RESUME AT 2:00 PM";
-    } else if (stateStr.includes('risen')) {
-        activeContainer.style.color = 'var(--purple)';
-        activeContainer.innerText = "⏳ COURT RISEN BRIEFLY — PROCEEDINGS RESUME SHORTLY";
-    } else if (stateStr.includes('adjourned')) {
+    if (stateStr.includes('adjourned')) {
         activeContainer.style.color = 'var(--red)';
         activeContainer.innerText = "🛑 BOARD CONCLUDED / ADJOURNED FOR THE DAY";
     } else {
