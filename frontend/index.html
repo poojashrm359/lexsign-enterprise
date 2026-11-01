@@ -122,9 +122,26 @@
 #displayView, #masterView {
     padding-bottom: 70px;
 }
+
+body.kiosk-mode .top-nav { display: none !important; }
+body.kiosk-mode .app-shell { padding: 12px 16px; max-width: none; }
+body.kiosk-mode #loginView { display: none !important; }
+
+/* Loaders */
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes loaderSlide { 0% { left: -40%; } 100% { left: 100%; } }
+.spinner { display: inline-block; width: 18px; height: 18px; border: 3px solid rgba(212, 175, 55, 0.25); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; flex-shrink: 0; }
+.spinner.lg { width: 42px; height: 42px; border-width: 4px; }
+.inline-loader { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 24px; color: #9ca3af; font-size: 13px; }
+#topLoader { position: fixed; top: 0; left: 0; width: 100%; height: 3px; overflow: hidden; z-index: 10001; display: none; pointer-events: none; }
+#topLoader::before { content: ""; position: absolute; top: 0; height: 100%; width: 40%; background: var(--gold); box-shadow: 0 0 8px var(--gold); animation: loaderSlide 1s ease-in-out infinite; }
+#busyOverlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); z-index: 10000; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: #f8fafc; font-size: 14px; font-weight: 600; }
+body.kiosk-mode #busyOverlay { display: none !important; }
     </style>
 </head>
 <body>
+    <div id="topLoader"></div>
+    <div id="busyOverlay"><span class="spinner lg"></span><span id="busyOverlayText">Please wait...</span></div>
 
     <!-- LOGIN SCREEN -->
     <div id="loginView" class="login-container">
@@ -174,9 +191,10 @@
                     <div>
                         <span style="font-size:11px; color:var(--gold); font-weight:bold;">BENCH CLERK CONSOLE • STATE CONSUMER DISPUTES REDRESSAL COMMISSION</span>
                         <select id="activeBenchSelector" onchange="onBenchChange()" style="background:#070a13; border:1px solid var(--border); color:var(--gold); padding:6px 12px; border-radius:5px; font-weight:bold; font-size:14px; margin-top:4px; display:block;">
-                            <option value="BENCH-1">BENCH-1 - Court Hall No. 1 (First Floor)</option>
-                            <option value="BENCH-2">BENCH-2 - Court Hall No. 2 (Second Floor)</option>
-                            <option value="BENCH-3">BENCH-3 - Court Hall No. 3 (Ground Floor)</option>
+                            <option value="BENCH-1">Hall No. 1 — State Commission (Principal Bench)</option>
+                            <option value="BENCH-2">Hall No. 2 — District Commission-I</option>
+                            <option value="BENCH-3">Hall No. 3 — District Commission-II</option>
+                            <option value="BENCH-4">Hall No. 4 — State Commission (Additional Bench)</option>
                         </select>
                     </div>
                     <div>
@@ -239,13 +257,14 @@
                     <div style="display:flex; gap:8px;">
                         <input type="file" id="excelFile" accept=".xlsx, .csv" style="display:none;" onchange="uploadExcel()">
                         <button class="btn-control" onclick="document.getElementById('excelFile').click()" style="background:#1e293b; color:white;">📁 Bulk Ingest (CSV / XLSX)</button>
+                        <button class="btn-control" onclick="downloadCauseList()" style="background:#1e293b; color:var(--green); border-color:var(--green);">⬇️ Download Excel</button>
                         <button class="btn-control" onclick="openAddModal()" style="background:var(--gold); color:#000;">+ Add Matter</button>
                         <button class="btn-control" onclick="confirmDeleteCauseList()" style="background: #991b1b; color: white; padding: 6px 12px; border-radius: 4px; font-weight: bold; border: 1px solid #f87171;">
                             🗑️ Delete Cause List
                         </button>
                     </div>
                 </div>
-                <div id="causeListTableContainer">Loading cause list...</div>
+                <div id="causeListTableContainer"><div class="inline-loader"><span class="spinner"></span>Loading cause list...</div></div>
             </div>
         </div>
 
@@ -262,7 +281,7 @@
                     <span style="font-size:11px; color:#9ca3af;">💡 Hover over queue anytime to pause and read</span>
                 </div>
                 <div class="scrollable-queue" id="outsideQueueContainer" onmouseenter="pauseAutoScroll()" onmouseleave="resumeAutoScroll()">
-                    Loading queue...
+                    <div class="inline-loader"><span class="spinner"></span>Loading queue...</div>
                 </div>
             </div>
             <!-- 📢 FIXED BOTTOM TICKER FOR OUTSIDE DISPLAY -->
@@ -281,27 +300,27 @@
         <!-- 3. MASTER CONSOLIDATED DISPLAY -->
         <div id="masterView" class="view-section">
             <div class="live-control-card" style="border: 2px solid var(--purple); padding: 25px; margin-bottom: 20px;">
-                <span class="badge-hearing" style="background:var(--purple); color:white; font-size:12px;">🏛️ CONSOLIDATED PUBLIC WAITING HALL & CORRIDOR DISPLAY (BENCH 1, 2, AND 3)</span>
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top: 20px;" id="masterActiveBenchesGrid"></div>
+                <span class="badge-hearing" style="background:var(--purple); color:white; font-size:12px;">🏛️ CONSOLIDATED PUBLIC WAITING HALL & CORRIDOR DISPLAY (HALL NO. 1, 2, 3 AND 4)</span>
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-top: 20px;" id="masterActiveBenchesGrid"></div>
             </div>
 
             <div class="live-control-card">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                    <h3 style="margin:0;" id="masterTotalMattersHeading">CONSOLIDATED CAUSE LIST — ALL MATTERS (BENCH 1, 2, 3)</h3>
+                    <h3 style="margin:0;" id="masterTotalMattersHeading">CONSOLIDATED CAUSE LIST — ALL MATTERS (HALL NO. 1–4)</h3>
                     <span style="font-size:11px; color:#9ca3af;">💡 Hover over table anytime to pause and read</span>
                 </div>
                 <div class="scrollable-queue" id="masterQueueContainer" onmouseenter="pauseAutoScroll()" onmouseleave="resumeAutoScroll()">
-                    Loading consolidated master list...
+                    <div class="inline-loader"><span class="spinner"></span>Loading consolidated master list...</div>
                 </div>
             </div>
             <!-- 📢 FIXED BOTTOM TICKER FOR MASTER DISPLAY -->
 <div class="fixed-bottom-ticker" style="border-top-color: var(--purple);">
     <span style="background: var(--purple); color: #fff; font-weight: bold; font-size: 12px; padding: 6px 12px; border-radius: 4px; white-space: nowrap; text-transform: uppercase;">
-        📢 ALL BENCHES TICKER
+        📢 ALL HALLS TICKER
     </span>
     <div class="ticker-scroll-wrapper">
         <span class="ticker-scroll-text" id="masterTickerText">
-            All Benches in Session.
+            All Halls in Session.
         </span>
     </div>
 </div>
@@ -310,8 +329,8 @@
         <!-- 4. MASTER ATRIUM -->
         <div id="atriumView" class="view-section">
             <div class="live-control-card">
-                <h2>🏛️ Master Atrium 4K Video Wall (All Benches)</h2>
-                <div id="atriumContainer">Loading atrium...</div>
+                <h2>🏛️ Master Atrium 4K Video Wall (All Halls)</h2>
+                <div id="atriumContainer"><div class="inline-loader"><span class="spinner"></span>Loading atrium...</div></div>
             </div>
         </div>
 
@@ -333,11 +352,12 @@
                             </div>
                         </div>
                         <div class="form-group">
-                            <label>Assigned Bench (1 Reader per Court Room)</label>
+                            <label>Assigned Hall (1 Reader per Court Hall)</label>
                             <select id="staffBench">
-                                <option value="BENCH-1">BENCH-1 (Court Hall No. 1)</option>
-                                <option value="BENCH-2">BENCH-2 (Court Hall No. 2)</option>
-                                <option value="BENCH-3">BENCH-3 (Court Hall No. 3)</option>
+                                <option value="BENCH-1">Hall No. 1 — State Commission (Principal Bench)</option>
+                                <option value="BENCH-2">Hall No. 2 — District Commission-I</option>
+                                <option value="BENCH-3">Hall No. 3 — District Commission-II</option>
+                                <option value="BENCH-4">Hall No. 4 — State Commission (Additional Bench)</option>
                                 <option value="ALL">ALL (Admin Registrar)</option>
                             </select>
                         </div>
@@ -346,26 +366,32 @@
                     <div id="staffMsg" style="margin-top:8px; font-weight:bold;"></div>
                 </div>
                 <h3>Registered System Users</h3>
-                <div id="adminUsersTableContainer">Loading users...</div>
+                <div id="adminUsersTableContainer"><div class="inline-loader"><span class="spinner"></span>Loading users...</div></div>
             </div>
             <!-- ⚖️ BENCH & CORAM MANAGEMENT CARD -->
 <div class="live-control-card" style="margin-top: 20px; border: 2px solid var(--gold);">
-    <h3 style="color: var(--gold); margin-top:0;">⚖️ Bench Coram & Courtroom Management</h3>
-    <p style="font-size: 13px; color: #9ca3af;">Update the presiding Judges (Coram) and Court Hall titles across displays.</p>
-    
-    <div style="display: grid; grid-template-columns: 1fr 2fr 2fr; gap: 15px; align-items: flex-end;">
+    <h3 style="color: var(--gold); margin-top:0;">⚖️ Court Hall & Coram Management</h3>
+    <p style="font-size: 13px; color: #9ca3af;">Update each hall's Commission name, location and presiding Judges (Coram). Changes appear on the Master Atrium, Master Display and Outside Display.</p>
+
+    <div style="display: grid; grid-template-columns: 1fr 2fr 1fr 2fr; gap: 15px; align-items: flex-end;">
         <div class="form-group" style="margin: 0;">
-            <label>Select Bench *</label>
+            <label>Select Hall *</label>
             <select id="adminCoramBenchSelect" onchange="onAdminBenchSelectChange()" style="width: 100%; background: #070a13; border: 1px solid var(--border); color: #fff; padding: 8px; border-radius: 4px;">
-                <option value="BENCH-1">BENCH-1</option>
-                <option value="BENCH-2">BENCH-2</option>
-                <option value="BENCH-3">BENCH-3</option>
+                <option value="BENCH-1">Hall No. 1</option>
+                <option value="BENCH-2">Hall No. 2</option>
+                <option value="BENCH-3">Hall No. 3</option>
+                <option value="BENCH-4">Hall No. 4</option>
             </select>
         </div>
 
         <div class="form-group" style="margin: 0;">
-            <label>Courtroom Title *</label>
-            <input type="text" id="adminRoomTitleInput" placeholder="e.g. Court Hall No. 2 (Second Floor)" style="width: 100%; background: #070a13; border: 1px solid var(--border); color: #fff; padding: 8px; border-radius: 4px;">
+            <label>Commission / Bench Name *</label>
+            <input type="text" id="adminCommissionInput" placeholder="e.g. District Commission-I" style="width: 100%; background: #070a13; border: 1px solid var(--border); color: #fff; padding: 8px; border-radius: 4px;">
+        </div>
+
+        <div class="form-group" style="margin: 0;">
+            <label>Location / Floor</label>
+            <input type="text" id="adminRoomTitleInput" placeholder="e.g. Second Floor" style="width: 100%; background: #070a13; border: 1px solid var(--border); color: #fff; padding: 8px; border-radius: 4px;">
         </div>
 
         <div class="form-group" style="margin: 0;">
@@ -376,7 +402,7 @@
 
     <div style="margin-top: 15px; display: flex; align-items: center; gap: 15px;">
         <button class="btn-control" onclick="saveBenchCoramConfig()" style="background: var(--gold); color: #000; padding: 8px 16px; font-weight: bold; border-radius: 4px;">
-            💾 Save & Update Coram
+            💾 Save Hall Details
         </button>
         <span id="coramSaveMsg" style="font-size: 13px;"></span>
     </div>
@@ -407,7 +433,7 @@
     <!-- MODAL: ADD MATTER -->
     <div id="addModal" class="modal-overlay">
         <div class="modal-card">
-            <h3 style="color:var(--gold); margin-top:0;">Add New Matter to Cause List</h3>
+            <h3 id="addModalTitle" style="color:var(--gold); margin-top:0;">Add New Matter to Cause List</h3>
             <div class="form-group"><label>Sr No. *</label><input type="text" id="addSrNo" placeholder="6"></div>
             <div class="form-group"><label>Formal Case Number *</label><input type="text" id="addCaseNo" placeholder="CC/2026/109"></div>
             <div class="form-group"><label>Case Title (Parties) *</label><input type="text" id="addCaseTitle" placeholder="Complainant vs. Opposite Party"></div>
@@ -428,11 +454,39 @@
             <div class="form-group"><label>Bench Notes (Optional)</label><input type="text" id="addBenchNote" placeholder="e.g. Affidavit pending"></div>
             <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:15px;">
                 <button class="btn-control" onclick="closeAddModal()" style="background:#1e293b; color:white;">Cancel</button>
-                <button class="btn-control" onclick="submitNewMatter()" style="background:var(--gold); color:#000;">Add to Cause List</button>
+                <button class="btn-control" id="addModalSubmitBtn" onclick="submitNewMatter()" style="background:var(--gold); color:#000;">Add to Cause List</button>
             </div>
         </div>
     </div>
+<!-- Adjournment / Case Action Modal -->
+<div id="adjModal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 9999; justify-content: center; align-items: center;">
+    <div class="modal-content" style="background: #1e293b; color: #fff; padding: 24px; border-radius: 8px; width: 340px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
+        <h3 style="margin-top: 0; color: #f8fafc; font-size: 1.2rem;">Adjourn Case</h3>
+        
+        <div style="margin: 16px 0;">
+            <label for="adjModalDate" style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: #cbd5e1;">Next Hearing</label>
+            <input
+                type="date"
+                id="adjModalDate"
+                onclick="try{ this.showPicker(); } catch(e){}"
+                oninput="setAdjClosed(false)"
+                style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: #ffffff; font-size: 0.95rem; color-scheme: dark; cursor: pointer;"
+            >
+        </div>
 
+        <div style="text-align: center; font-size: 0.8rem; color: #64748b; margin: -4px 0 12px;">— or —</div>
+
+        <button type="button" id="adjModalClosedBtn" onclick="setAdjClosed(!adjClosedSelected)"
+            style="width: 100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid var(--red); background: transparent; color: var(--red); font-weight: 600; cursor: pointer;">
+            Closed
+        </button>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+            <button onclick="closeAdjModal()" style="background: #475569; color: #fff; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Cancel</button>
+            <button onclick="submitAdjModal()" style="background: #8b5cf6; color: #fff; border: none; padding: 8px 18px; border-radius: 4px; cursor: pointer; font-weight: 600;">OK</button>
+        </div>
+    </div>
+</div>
     <script>
         let currentUser = null;
         let currentCauseList = [];
@@ -450,6 +504,47 @@
             else { field.type = 'password'; iconElem.innerText = '👁️'; }
         }
         const API_URL = window.location.origin;
+
+        // Global loaders: any request slower than LOADER_DELAY_MS shows the top progress bar;
+        // saves/uploads/deletes (non-GET) also show a blocking "Please wait" overlay so they
+        // can't be clicked twice. Fast requests (and the 3s display polling) never flash anything.
+        const LOADER_DELAY_MS = 300;
+        let pendingRequests = 0, pendingWrites = 0, loaderTimer = null;
+
+        function updateLoaders() {
+            clearTimeout(loaderTimer);
+            if (pendingRequests === 0 && pendingWrites === 0) {
+                document.getElementById('topLoader').style.display = 'none';
+                document.getElementById('busyOverlay').style.display = 'none';
+                return;
+            }
+            loaderTimer = setTimeout(() => {
+                document.getElementById('topLoader').style.display = 'block';
+                document.getElementById('busyOverlay').style.display = pendingWrites > 0 ? 'flex' : 'none';
+            }, LOADER_DELAY_MS);
+        }
+
+        const nativeFetch = window.fetch.bind(window);
+        window.fetch = async (input, init = {}) => {
+            const method = (init.method || 'GET').toUpperCase();
+            const isWrite = method !== 'GET';
+            if (isWrite) {
+                document.getElementById('busyOverlayText').innerText =
+                    String(input).includes('/auth/login') ? 'Signing in...'
+                    : init.body instanceof FormData ? 'Uploading & processing...'
+                    : method === 'DELETE' ? 'Deleting...' : 'Saving...';
+            }
+            pendingRequests++;
+            if (isWrite) pendingWrites++;
+            updateLoaders();
+            try {
+                return await nativeFetch(input, init);
+            } finally {
+                pendingRequests--;
+                if (isWrite) pendingWrites--;
+                updateLoaders();
+            }
+        };
         async function handleLogin() {
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
@@ -472,7 +567,7 @@
             currentUser = user;
             document.getElementById('loginView').style.display = 'none';
             document.getElementById('appView').style.display = 'block';
-            document.getElementById('userBadge').innerText = `${user.name} (${user.role} | ${user.bench})`;
+            document.getElementById('userBadge').innerText = `${user.name} (${user.role} | ${user.bench === 'ALL' ? 'ALL' : 'Hall No. ' + String(user.bench).replace(/\D/g, '')})`;
 
             if (user.role === 'ADMIN') {
                 // Hide Outside Display button for Admin as requested
@@ -494,10 +589,37 @@
     }, 3000);
         }
 
+        function getKioskConfig() {
+            const path = (window.location.pathname || '').replace(/\/+$/, '');
+            const match = path.match(/\/display\/(court-[1-4]|master-1|master-2)$/i);
+            if (!match) return null;
+            const screenId = match[1].toLowerCase();
+            if (screenId.startsWith('court-')) {
+                return { mode: 'display', bench: 'BENCH-' + screenId.slice(-1), screenId };
+            }
+            return { mode: 'master', bench: null, screenId };
+        }
+
+        function startKiosk(config) {
+            document.body.classList.add('kiosk-mode');
+            document.getElementById('loginView').style.display = 'none';
+            document.getElementById('appView').style.display = 'block';
+            if (config.bench) {
+                document.getElementById('activeBenchSelector').value = config.bench;
+            }
+            switchView(config.mode);
+            setInterval(() => {
+                if (config.mode === 'display') loadDisplayData();
+                else loadMasterConsolidatedData();
+            }, 3000);
+        }
+
         function switchView(viewName) {
     document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
-    event.target.classList.add('active');
+    if (window.event && window.event.target && window.event.target.classList) {
+        window.event.target.classList.add('active');
+    }
 
     if (viewName === 'reader') {
         document.getElementById('readerView').classList.add('active');
@@ -521,13 +643,45 @@
     }
 }
         function onBenchChange() { 
+            document.getElementById('causeListTableContainer').innerHTML = '<div class="inline-loader"><span class="spinner"></span>Loading cause list...</div>';
             loadCauseList(document.getElementById('activeBenchSelector').value); 
             loadBenchesData(); 
+        }
+
+        // "Hall No. 1" for a bench record
+        function hallLabel(b) {
+            return b && b.hall_no ? `Hall No. ${b.hall_no}` : (b && b.bench_id) || '';
+        }
+
+        // "Hall No. 1 — State Commission (Principal Bench)"
+        function hallTitle(b) {
+            return [hallLabel(b), b && b.commission].filter(Boolean).join(' — ');
+        }
+
+        function benchDisplayName(benchId) {
+            if (benchId === 'ALL') return 'ALL (Admin Registrar)';
+            const b = (window.benchesCache || []).find(x => x.bench_id === benchId);
+            return b ? hallTitle(b) : benchId;
+        }
+
+        // Refresh hall dropdown labels from the DB (names are edited in the Admin Directory)
+        function refreshHallSelectors(benches) {
+            const fill = (id, label, extra) => {
+                const sel = document.getElementById(id);
+                if (!sel) return;
+                const current = sel.value;
+                sel.innerHTML = benches.map(b => `<option value="${b.bench_id}">${label(b)}</option>`).join('') + (extra || '');
+                if ([...sel.options].some(o => o.value === current)) sel.value = current;
+            };
+            fill('activeBenchSelector', hallTitle);
+            fill('staffBench', hallTitle, '<option value="ALL">ALL (Admin Registrar)</option>');
+            fill('adminCoramBenchSelect', hallLabel);
         }
 
         async function loadBenchesData() {
     const res = await fetch(`${API_URL}/api/benches`);
     window.benchesCache = await res.json();
+    refreshHallSelectors(window.benchesCache);
     const benchId = document.getElementById('activeBenchSelector').value;
     const b = window.benchesCache.find(x => x.bench_id === benchId);
     if (b) {
@@ -605,7 +759,7 @@
                         <th>Actions</th>
                     </tr>`;
                 
-                currentCauseList.forEach(m => {
+                currentCauseList.forEach((m, idx) => {
                     const st = (m['Status'] || 'Scheduled').toUpperCase();
                     let badgeClass = 'badge-scheduled';
                     let rowClass = '';
@@ -613,7 +767,10 @@
                     if (st === 'ACTIVE' || st === 'HEARING') { badgeClass = 'badge-hearing'; rowClass = 'active-row'; }
                     else if (st === 'PASSED OVER') badgeClass = 'badge-passed';
                     else if (st === 'ADJOURNED') badgeClass = 'badge-adj';
-                    else if (st === 'DISPOSED') badgeClass = 'badge-disposed';
+                    else if (st === 'DISPOSED' || st === 'CLOSED') badgeClass = 'badge-disposed';
+
+                    let statusText = st === 'ACTIVE' ? 'HEARING' : st;
+                    if (st === 'ADJOURNED' && m['Next Date']) statusText = `NEXT HEARING: ${m['Next Date']}`;
 
                     html += `<tr class="${rowClass}">
                         <td><b>${m['Sr No.'] || ''}</b></td>
@@ -621,11 +778,15 @@
                         <td>${m['Case Title & Parties'] || ''}<br><span style="font-size:11px; color:#9ca3af;">${m['Bench Note'] || ''}</span></td>
                         <td>${m['Counsels'] || ''}</td>
                         <td>${m['Stage'] || ''}</td>
-                        <td><span class="${badgeClass}">${st === 'ACTIVE' ? 'HEARING' : st}</span></td>
+                        <td><span class="${badgeClass}">${statusText}</span></td>
                         <td>
-                            <button class="btn-control" onclick="executeActionOnCase('${benchId}', '${m['Case No.']}', 'Call')" style="background:var(--green); color:white; padding:4px 8px;">Call</button>
-                            <button class="btn-control" onclick="executeActionOnCase('${benchId}', '${m['Case No.']}', 'Pass')" style="background:#1e293b; color:var(--gold); padding:4px 8px;">Pass</button>
-                            <button class="btn-control" onclick="executeActionOnCase('${benchId}', '${m['Case No.']}', 'Adj')" style="background:#1e293b; color:var(--purple); padding:4px 8px;">Adj</button>
+                            <button class="btn-control" onclick="executeActionOnCase('${benchId}', '${jsAttr(m['Case No.'])}', 'Call')" style="background:var(--green); color:white; padding:4px 8px;">Call</button>
+                            <button class="btn-control" onclick="executeActionOnCase('${benchId}', '${jsAttr(m['Case No.'])}', 'Pass')" style="background:#1e293b; color:var(--gold); padding:4px 8px;">Pass</button>
+                            <button class="btn-control" onclick="executeActionOnCase('${benchId}', '${jsAttr(m['Case No.'])}', 'Adj')" style="background:#1e293b; color:var(--purple); padding:4px 8px;">Adj</button>
+                            <div style="margin-top:6px; display:flex; gap:4px;">
+                                <button class="btn-control" onclick="openEditModal(${idx})" style="background:#1e293b; color:#60a5fa; padding:4px 8px;">Edit</button>
+                                <button class="btn-control" onclick="deleteMatter(${idx})" style="background:#1e293b; color:var(--red); padding:4px 8px;">Delete</button>
+                            </div>
                         </td>
                     </tr>`;
                 });
@@ -650,6 +811,11 @@
             } else { alert("Error uploading file."); }
         }
 
+        // Escape a value for use inside a single-quoted JS string in an onclick attribute
+        function jsAttr(v) {
+            return String(v ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        }
+
         async function executeAction(actionType) {
             const activeObj = currentCauseList.find(m => {
                 const st = (m['Status'] || '').toLowerCase();
@@ -660,18 +826,6 @@
                 return;
             }
             executeActionOnCase(document.getElementById('activeBenchSelector').value, activeObj['Case No.'], actionType);
-        }
-
-        async function executeActionOnCase(benchId, caseNo, action) {
-            const formData = new URLSearchParams();
-            formData.append('case_no', caseNo);
-            formData.append('action', action);
-            await fetch(`${API_URL}/api/bench/${benchId}/action`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: formData
-            });
-            loadCauseList(benchId);
         }
 
         function setBenchState(st) {
@@ -708,11 +862,90 @@
 }
         function testChime() { alert("🔔 Court Chime Broadcasted to Display Nodes."); }
 
-        function openAddModal() { document.getElementById('addModal').style.display = 'flex'; }
-        function closeAddModal() { document.getElementById('addModal').style.display = 'none'; }
+        // Index of the matter being edited in the Add Matter modal; null = adding a new one
+        let editingMatterIdx = null;
+
+        function setMatterForm(m, srNo) {
+            // Counsels are stored as "C: <complainant> | R: <respondent>" by Add Matter
+            const counsels = m['Counsels'] || '';
+            const cr = counsels.match(/^C:\s*(.*?)\s*\|\s*R:\s*(.*)$/);
+            const stageSel = document.getElementById('addStage');
+            const stage = m['Stage'] || stageSel.options[0].value;
+            if (![...stageSel.options].some(o => o.value === stage)) stageSel.add(new Option(stage, stage));
+
+            document.getElementById('addSrNo').value = srNo;
+            document.getElementById('addCaseNo').value = m['Case No.'] || '';
+            document.getElementById('addCaseTitle').value = m['Case Title & Parties'] || '';
+            document.getElementById('addCompCounsel').value = cr ? cr[1] : counsels;
+            document.getElementById('addRespCounsel').value = cr ? cr[2] : '';
+            stageSel.value = stage;
+            document.getElementById('addBenchNote').value = m['Bench Note'] || '';
+        }
+
+        function openAddModal() {
+            editingMatterIdx = null;
+            setMatterForm({}, '');
+            document.getElementById('addSrNo').readOnly = false;
+            document.getElementById('addModalTitle').innerText = 'Add New Matter to Cause List';
+            document.getElementById('addModalSubmitBtn').innerText = 'Add to Cause List';
+            document.getElementById('addModal').style.display = 'flex';
+        }
+
+        function openEditModal(idx) {
+            const m = currentCauseList[idx];
+            if (!m) return;
+            editingMatterIdx = idx;
+            setMatterForm(m, m['Sr No.'] || String(idx + 1));
+            document.getElementById('addSrNo').readOnly = true;
+            document.getElementById('addModalTitle').innerText = 'Edit Matter';
+            document.getElementById('addModalSubmitBtn').innerText = 'Save Changes';
+            document.getElementById('addModal').style.display = 'flex';
+        }
+
+        function closeAddModal() {
+            document.getElementById('addModal').style.display = 'none';
+            editingMatterIdx = null;
+        }
+
+        async function deleteMatter(idx) {
+            const m = currentCauseList[idx];
+            if (!m) return;
+            const label = m['Case No.'] || `Sr. ${m['Sr No.'] || idx + 1}`;
+            if (!confirm(`Delete matter ${label} from the cause list?`)) return;
+            const benchId = document.getElementById('activeBenchSelector').value;
+            const res = await fetch(`${API_URL}/api/cause-list/${benchId}/matter/${idx}`, { method: 'DELETE' });
+            if (!res.ok) alert('Could not delete matter. Please refresh and try again.');
+            loadCauseList(benchId);
+        }
+
+        async function downloadCauseList() {
+            const benchId = document.getElementById('activeBenchSelector').value;
+            document.getElementById('busyOverlayText').innerText = 'Preparing Excel...';
+            pendingWrites++;  // blocking action: keep the overlay up until the file is saved
+            updateLoaders();
+            try {
+                const res = await fetch(`${API_URL}/api/cause-list/${encodeURIComponent(benchId)}/export`);
+                if (!res.ok) throw new Error(res.statusText);
+                const match = (res.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/);
+                const url = URL.createObjectURL(await res.blob());
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = match ? match[1] : `${benchId}_cause_list.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+            } catch (e) {
+                alert('Could not download the cause list. Please try again.');
+            } finally {
+                pendingWrites--;
+                updateLoaders();
+            }
+        }
 
         async function submitNewMatter() {
             const benchId = document.getElementById('activeBenchSelector').value;
+            const isEdit = editingMatterIdx !== null;
             const payload = {
                 sr_no: document.getElementById('addSrNo').value,
                 case_no: document.getElementById('addCaseNo').value,
@@ -722,14 +955,19 @@
                 stage: document.getElementById('addStage').value,
                 bench_note: document.getElementById('addBenchNote').value
             };
-            const res = await fetch(`${API_URL}/api/cause-list/${benchId}/add-single`, {
-                method: 'POST',
+            const url = isEdit
+                ? `${API_URL}/api/cause-list/${benchId}/matter/${editingMatterIdx}`
+                : `${API_URL}/api/cause-list/${benchId}/add-single`;
+            const res = await fetch(url, {
+                method: isEdit ? 'PUT' : 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(payload)
             });
             if (res.ok) {
                 closeAddModal();
                 loadCauseList(benchId);
+            } else if (isEdit) {
+                alert('Could not save changes. Please refresh and try again.');
             }
         }
 
@@ -767,7 +1005,7 @@
         activeContainer.innerText = active ? `NOW HEARING: ${active['Case No.']} — ${active['Case Title & Parties']}` : "NO MATTER ACTIVE";
     }
     
-    document.getElementById('outsideCoram').innerText = `${bench.room_title || ''} | Coram: ${bench.coram || ''}`;
+    document.getElementById('outsideCoram').innerText = `${hallTitle(bench)} | Coram: ${bench.coram || ''}`;
 
     // 4. Update Marquee Ticker
     const tickerElem = document.getElementById('outsideTickerText');
@@ -833,9 +1071,11 @@ async function loadMasterConsolidatedData() {
         }
         lastMasterActiveCases[b.bench_id] = b.active_case;
 
-        // 🏛️ Bench Card with Coram Added
+        // 🏛️ Hall Card with Commission & Coram
         topGridHtml += `<div style="background:#070a13; padding:15px; border-radius:6px; border:1px solid var(--border); text-align:center;">
-            <span style="font-size:11px; color:var(--gold); font-weight:bold;">${b.bench_id} (${b.room_title || 'Court Hall'})</span>
+            <span style="font-size:13px; color:var(--gold); font-weight:bold; letter-spacing:0.5px;">${hallLabel(b).toUpperCase()}</span>
+            <div style="font-size:12px; color:#fff; font-weight:700; margin-top:2px;">${b.commission || ''}</div>
+            ${b.room_title ? `<div style="font-size:10px; color:#9ca3af;">${b.room_title}</div>` : ''}
             
             <!-- 👇 CORAM DISPLAYED ON MASTER SCREEN 👇 -->
             <div style="font-size:12px; color:#cbd5e1; margin:4px 0; font-weight:600;">⚖️ ${b.coram || 'Coram not assigned'}</div>
@@ -850,22 +1090,22 @@ async function loadMasterConsolidatedData() {
     }
 
     document.getElementById('masterActiveBenchesGrid').innerHTML = topGridHtml;
-    document.getElementById('masterTotalMattersHeading').innerText = `CONSOLIDATED CAUSE LIST — ALL MATTERS (BENCH 1, 2, 3) • ${matters.length} total matters`;
+    document.getElementById('masterTotalMattersHeading').innerText = `CONSOLIDATED CAUSE LIST — ALL MATTERS (HALL NO. 1–4) • ${matters.length} total matters`;
 
     // Render Ticker
     const combinedTickers = benches
-        .map(b => `${b.bench_id}: ${b.ticker_message || 'In Session'}`)
+        .map(b => `${hallLabel(b)}: ${b.ticker_message || 'In Session'}`)
         .join("   •   ");
     
     const masterTickerElem = document.getElementById('masterTickerText');
     if (masterTickerElem) {
-        masterTickerElem.innerText = combinedTickers || "All Benches in Session.";
+        masterTickerElem.innerText = combinedTickers || "All Halls in Session.";
     }
 
     // Render Master Table
     let html = `<table>
         <tr>
-            <th>Bench</th>
+            <th>Hall</th>
             <th>Sr.</th>
             <th>Case Number</th>
             <th>Parties (Complainant vs. Opposite Party)</th>
@@ -885,7 +1125,7 @@ async function loadMasterConsolidatedData() {
         else if (st === 'DISPOSED') badgeClass = 'badge-disposed';
 
         html += `<tr class="${rowClass}">
-            <td><b><span style="background:#1e293b; padding:3px 6px; border-radius:4px; color:var(--gold);">${m['Bench'] || ''}</span></b></td>
+            <td><b><span style="background:#1e293b; padding:3px 6px; border-radius:4px; color:var(--gold); white-space:nowrap;">${m['Hall'] || m['Bench'] || ''}</span></b></td>
             <td><b>${m['Sr No.'] || ''}</b></td>
             <td><b style="color:var(--gold);">${m['Case No.'] || ''}</b></td>
             <td>${m['Case Title & Parties'] || ''}</td>
@@ -947,8 +1187,8 @@ function startAutoScroll() {
             </div>`;
         }
 
-        // Render Bench Cards
-        html += `<div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">`;
+        // Render Hall Cards
+        html += `<div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 15px;">`;
         benches.forEach(b => {
             let badgeClass = "badge-hearing";
             const stateStr = (b.state || '').toLowerCase();
@@ -956,8 +1196,10 @@ function startAutoScroll() {
             else if (stateStr.includes('risen')) badgeClass = "badge-passed";
 
             html += `<div style="background:#070a13; padding:18px; border-radius:8px; border:1px solid var(--border);">
-                <h3 style="color:var(--gold); margin-top:0;">${b.bench_id} — ${b.room_title}</h3>
-                <p style="font-size:13px; color:#9ca3af; margin:5px 0;"><b>Coram:</b> ${b.coram}</p>
+                <h3 style="color:var(--gold); margin:0;">${hallLabel(b)}</h3>
+                <p style="font-size:14px; color:#fff; font-weight:600; margin:4px 0 0 0;">${b.commission || ''}</p>
+                ${b.room_title ? `<p style="font-size:11px; color:#9ca3af; margin:2px 0 0 0;">${b.room_title}</p>` : ''}
+                <p style="font-size:13px; color:#9ca3af; margin:8px 0 5px 0;"><b>Coram:</b> ${b.coram || 'Not assigned'}</p>
                 <p style="font-size:13px; margin:5px 0;"><b>State:</b> <span class="${badgeClass}">${b.state}</span></p>
                 <hr style="border-color:var(--border); margin:10px 0;">
                 <p style="font-size:12px; color:#9ca3af; margin:0;">Active Matter:</p>
@@ -974,9 +1216,9 @@ function startAutoScroll() {
         async function loadAdminUsers() {
             const res = await fetch(`${API_URL}/api/admin/users`);
             const users = await res.json();
-            let html = `<table><tr><th>Name</th><th>Username</th><th>Role</th><th>Bench</th></tr>`;
+            let html = `<table><tr><th>Name</th><th>Username</th><th>Role</th><th>Hall</th></tr>`;
             users.forEach(u => {
-                html += `<tr><td><b>${u.name}</b></td><td>${u.username}</td><td>${u.role}</td><td>${u.bench}</td></tr>`;
+                html += `<tr><td><b>${u.name}</b></td><td>${u.username}</td><td>${u.role}</td><td>${benchDisplayName(u.bench)}</td></tr>`;
             });
             html += `</table>`;
             document.getElementById('adminUsersTableContainer').innerHTML = html;
@@ -1006,6 +1248,11 @@ function startAutoScroll() {
 
         function logout() { localStorage.removeItem('user'); location.reload(); }
         window.onload = () => {
+            const kiosk = getKioskConfig();
+            if (kiosk) {
+                startKiosk(kiosk);
+                return;
+            }
             const user = localStorage.getItem('user');
             if (user) initApp(JSON.parse(user));
         };
@@ -1079,7 +1326,7 @@ async function loadDisplayData() {
         activeContainer.innerText = active ? `NOW HEARING: ${active['Case No.']} — ${active['Case Title & Parties']}` : "NO MATTER ACTIVE";
     }
     
-    document.getElementById('outsideCoram').innerText = `${bench.room_title || ''} | Coram: ${bench.coram || ''}`;
+    document.getElementById('outsideCoram').innerText = `${hallTitle(bench)} | Coram: ${bench.coram || ''}`;
 
     // Update Ticker Text
   const tickerElem = document.getElementById('outsideTickerText');
@@ -1146,7 +1393,7 @@ async function confirmDeleteCauseList() {
     const benchId = document.getElementById('activeBenchSelector').value;
     
     // Safety confirmation dialog to prevent accidental deletion
-    const confirmed = confirm(`⚠️ Are you sure you want to delete and clear the entire Cause List for ${benchId}? This action cannot be undone.`);
+    const confirmed = confirm(`⚠️ Are you sure you want to delete and clear the entire Cause List for ${benchDisplayName(benchId)}? This action cannot be undone.`);
     
     if (!confirmed) return;
 
@@ -1213,6 +1460,7 @@ async function onAdminBenchSelectChange() {
     const b = benches.find(x => x.bench_id === selectedBenchId);
     
     if (b) {
+        document.getElementById('adminCommissionInput').value = b.commission || '';
         document.getElementById('adminRoomTitleInput').value = b.room_title || '';
         document.getElementById('adminCoramInput').value = b.coram || '';
     }
@@ -1222,6 +1470,7 @@ async function onAdminBenchSelectChange() {
 async function saveBenchCoramConfig() {
     const payload = {
         bench_id: document.getElementById('adminCoramBenchSelect').value,
+        commission: document.getElementById('adminCommissionInput').value,
         room_title: document.getElementById('adminRoomTitleInput').value,
         coram: document.getElementById('adminCoramInput').value
     };
@@ -1243,6 +1492,78 @@ async function saveBenchCoramConfig() {
         }
     } catch(e) {
         document.getElementById('coramSaveMsg').innerHTML = `<span style="color:var(--red);">Connection error.</span>`;
+    }
+}
+// Case pending in the Adjourn modal, and whether "Closed" is selected there
+let pendingAdjCase = null;
+let adjClosedSelected = false;
+
+/**
+ * Main per-case action trigger.
+ * 'Adj' opens the Next Hearing / Closed modal; everything else goes straight to the API.
+ */
+async function executeActionOnCase(benchId, caseNo, action) {
+    if (action === 'Adj') {
+        openAdjModal(benchId, caseNo);
+    } else {
+        await sendCaseActionToAPI(benchId, caseNo, action);
+    }
+}
+
+async function sendCaseActionToAPI(benchId, caseNo, action, nextDate) {
+    try {
+        const formData = new URLSearchParams();
+        formData.append('case_no', caseNo);
+        formData.append('action', action);
+        if (nextDate) formData.append('next_date', nextDate);
+
+        await fetch(`${API_URL}/api/bench/${benchId}/action`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: formData
+        });
+        loadCauseList(benchId);
+    } catch (err) {
+        console.error('Failed to update case action:', err);
+    }
+}
+
+function openAdjModal(benchId, caseNo) {
+    pendingAdjCase = { benchId, caseNo };
+    document.getElementById('adjModalDate').value = '';
+    setAdjClosed(false);
+    document.getElementById('adjModal').style.display = 'flex';
+}
+
+function closeAdjModal() {
+    document.getElementById('adjModal').style.display = 'none';
+    pendingAdjCase = null;
+}
+
+/** Selecting "Closed" clears the date; picking a date deselects "Closed". */
+function setAdjClosed(selected) {
+    adjClosedSelected = selected;
+    const btn = document.getElementById('adjModalClosedBtn');
+    btn.style.background = selected ? 'var(--red)' : 'transparent';
+    btn.style.color = selected ? '#fff' : 'var(--red)';
+    if (selected) document.getElementById('adjModalDate').value = '';
+}
+
+async function submitAdjModal() {
+    if (!pendingAdjCase) return;
+    const { benchId, caseNo } = pendingAdjCase;
+    const dateVal = document.getElementById('adjModalDate').value;
+
+    if (adjClosedSelected) {
+        closeAdjModal();
+        await sendCaseActionToAPI(benchId, caseNo, 'Closed');
+    } else if (dateVal) {
+        // YYYY-MM-DD -> DD/MM/YYYY
+        const [y, mo, d] = dateVal.split('-');
+        closeAdjModal();
+        await sendCaseActionToAPI(benchId, caseNo, 'Adj', `${d}/${mo}/${y}`);
+    } else {
+        alert('Please select a Next Hearing date or choose Closed.');
     }
 }
     </script>

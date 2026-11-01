@@ -1,10 +1,11 @@
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from pydantic import BaseModel
 import pandas as pd
 import io
 import os
+import re
 
 from database import db, pwd_context, seed_database
 
@@ -21,11 +22,26 @@ app.add_middleware(
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 INDEX_PATH = os.path.join(BASE_DIR, "frontend", "index.html")
 
-@app.get("/")
-async def read_index():
+KIOSK_SCREENS = {"court-1", "court-2", "court-3", "court-4", "master-1", "master-2"}
+
+
+def serve_index():
     if not os.path.exists(INDEX_PATH):
         return {"error": f"index.html not found at expected path: {INDEX_PATH}"}
     return FileResponse(INDEX_PATH)
+
+
+@app.get("/")
+async def read_index():
+    return serve_index()
+
+
+@app.get("/display/{screen_id}")
+async def kiosk_display(screen_id: str):
+    """Dedicated kiosk URLs for the five registered hallway/court screens."""
+    if screen_id.lower() not in KIOSK_SCREENS:
+        raise HTTPException(status_code=404, detail="Unknown display screen")
+    return serve_index()
 
 @app.on_event("startup")
 async def startup_event():
@@ -97,7 +113,7 @@ async def delete_user(username: str):
 
 @app.get("/api/benches")
 async def get_benches():
-    return await db.benches.find({}, {"_id": 0}).to_list(100)
+    return await db.benches.find({}, {"_id": 0}).sort([("hall_no", 1), ("bench_id", 1)]).to_list(100)
 
 @app.post("/api/bench/{bench_id}/state")
 async def update_bench_state(bench_id: str, state: str = Form(...)):
@@ -109,29 +125,108 @@ async def update_ticker(bench_id: str, message: str = Form(...)):
     await db.benches.update_one({"bench_id": bench_id}, {"$set": {"ticker_message": message}})
     return {"status": "success", "message": message}
 
+def _norm_header(h) -> str:
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", str(h).lower()).split())
+
+
+def _classify_header(h: str):
+    """Map a free-form Excel header to one of our matter fields (None = ignore)."""
+    n = _norm_header(h)
+    if not n or n.startswith("unnamed"):
+        return None
+    words = set(n.split())
+    if n in ("sr", "sr no", "s no", "sno", "sl", "sl no", "serial", "serial no", "item no", "no", "item") or words & {"sr", "sno", "serial"}:
+        return "Sr No."
+    if words & {"counsel", "counsels", "advocate", "advocates", "lawyer", "lawyers"}:
+        return "Counsels"
+    if "status" in words:
+        return "Status"
+    if words & {"stage", "purpose"}:
+        return "Stage"
+    if words & {"note", "notes", "remark", "remarks"}:
+        return "Bench Note"
+    if ("case" in words or words & {"complaint", "appeal", "petition", "file", "diary", "fa", "cc", "rp"}) and words & {"no", "number", "num", "id"}:
+        return "Case No."
+    if words & {"title", "party", "parties", "vs", "versus", "v", "complainant", "complainants", "opposite",
+                "respondent", "respondents", "appellant", "appellants", "petitioner", "petitioners", "name", "names"}:
+        return "Case Title & Parties"
+    if "case" in words:
+        return "Case No."
+    return None
+
+
+# Used when no recognisable header row exists: Case No., Parties, Counsels, Stage in column order
+POSITIONAL_FIELDS = ["Case No.", "Case Title & Parties", "Counsels", "Stage"]
+
+
+def _cell(v) -> str:
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return ""
+    s = str(v).strip()
+    return "" if s.lower() == "nan" else s
+
+
+def parse_cause_list(raw: pd.DataFrame) -> list:
+    """Turn a headerless sheet into matter records, regardless of the exact header wording."""
+    raw = raw.dropna(how="all").dropna(axis=1, how="all").reset_index(drop=True)
+    if raw.empty:
+        return []
+
+    # Pick the header row (within the first 15 rows) that maps the most columns
+    best_row, best_map = None, {}
+    for r in range(min(15, len(raw))):
+        mapping = {c: f for c, v in raw.iloc[r].items() if (f := _classify_header(_cell(v)))}
+        if len(set(mapping.values())) > len(set(best_map.values())):
+            best_row, best_map = r, mapping
+
+    if best_row is not None and len(set(best_map.values()) - {"Sr No."}) >= 2:
+        data = raw.iloc[best_row + 1:]
+        col_map = best_map
+    else:
+        data = raw
+        cols = list(raw.columns)
+        # Skip a leading serial-number column
+        first = [_cell(v) for v in raw[cols[0]]]
+        if first and all(x.replace(".", "").isdigit() for x in first if x):
+            cols = cols[1:]
+        col_map = dict(zip(cols, POSITIONAL_FIELDS))
+
+    records = []
+    for _, row in data.iterrows():
+        rec = {}
+        for col, field in col_map.items():
+            if field == "Sr No.":
+                continue
+            val = _cell(row[col])
+            if not val:
+                continue
+            # Several columns can map to one field (e.g. Complainant + Opposite Party)
+            sep = " vs " if field == "Case Title & Parties" else " | "
+            rec[field] = f"{rec[field]}{sep}{val}" if field in rec else val
+        if not any(rec.get(f) for f in ("Case No.", "Case Title & Parties", "Counsels")):
+            continue
+        records.append({
+            "Sr No.": str(len(records) + 1),  # Auto-managed serial indexing
+            "Case No.": rec.get("Case No.", ""),
+            "Case Title & Parties": rec.get("Case Title & Parties", ""),
+            "Counsels": rec.get("Counsels", ""),
+            "Stage": rec.get("Stage", ""),
+            "Status": rec.get("Status") or "Scheduled",
+            "Bench Note": rec.get("Bench Note", ""),
+        })
+    return records
+
+
 @app.post("/api/cause-list/upload")
 async def upload_cause_list(bench_id: str = Form(...), file: UploadFile = File(...)):
     contents = await file.read()
     try:
-        if file.filename.endswith('.csv'):
-            df = pd.read_csv(io.BytesIO(contents))
+        if file.filename.lower().endswith('.csv'):
+            raw = pd.read_csv(io.BytesIO(contents), header=None, dtype=str)
         else:
-            df = pd.read_excel(io.BytesIO(contents))
-        
-        df = df.fillna("")
-        records = []
-        # Automatically assign clean sequential serial numbers regardless of incoming index formatting
-        for idx, row in enumerate(df.iterrows(), start=1):
-            row_data = row[1]
-            records.append({
-                "Sr No.": str(idx),  # Auto-managed serial indexing
-                "Case No.": str(row_data.get("Case No.", "")),
-                "Case Title & Parties": str(row_data.get("Case Title & Parties", "")),
-                "Counsels": str(row_data.get("Counsels", "")),
-                "Stage": str(row_data.get("Stage", "")),
-                "Status": str(row_data.get("Status", "Scheduled")),
-                "Bench Note": str(row_data.get("Bench Note", ""))
-            })
+            raw = pd.read_excel(io.BytesIO(contents), header=None, dtype=str)
+
+        records = parse_cause_list(raw)
         
         await db.cause_lists.update_one(
             {"bench_id": bench_id},
@@ -156,7 +251,7 @@ async def get_cause_list(bench_id: str):
 
 @app.get("/api/consolidated-cause-list")
 async def get_consolidated_cause_list():
-    benches = await db.benches.find({}, {"_id": 0}).to_list(100)
+    benches = await get_benches()
     all_matters = []
     
     for b in benches:
@@ -166,12 +261,13 @@ async def get_consolidated_cause_list():
         for m in matters:
             cleaned = {k: ("" if pd.isna(v) else v) for k, v in m.items()}
             cleaned["Bench"] = bench_id
+            cleaned["Hall"] = f"Hall No. {b['hall_no']}" if b.get("hall_no") else bench_id
             all_matters.append(cleaned)
             
     return {"benches": benches, "matters": all_matters}
 
 @app.post("/api/bench/{bench_id}/action")
-async def bench_action(bench_id: str, case_no: str = Form(...), action: str = Form(...)):
+async def bench_action(bench_id: str, case_no: str = Form(...), action: str = Form(...), next_date: str = Form(None)):
     list_doc = await db.cause_lists.find_one({"bench_id": bench_id})
     if list_doc:
         matters = list_doc.get("matters", [])
@@ -179,14 +275,20 @@ async def bench_action(bench_id: str, case_no: str = Form(...), action: str = Fo
             if m.get("Case No.") == case_no:
                 if action == "Call":
                     m["Status"] = "Hearing"
+                    m["Next Date"] = ""
                 elif action == "Pass":
                     m["Status"] = "Passed Over"
                 elif action == "Adj":
                     m["Status"] = "Adjourned"
+                    m["Next Date"] = next_date or ""
+                elif action == "Closed":
+                    m["Status"] = "Closed"
+                    m["Next Date"] = ""
                 elif action == "Disposed":
                     m["Status"] = "Disposed"
                 elif action == "Revert":
                     m["Status"] = "Scheduled"
+                    m["Next Date"] = ""
             elif action == "Call" and m.get("Status") == "Hearing":
                 m["Status"] = "Scheduled"
         
@@ -194,7 +296,7 @@ async def bench_action(bench_id: str, case_no: str = Form(...), action: str = Fo
     
     if action == "Call":
         await db.benches.update_one({"bench_id": bench_id}, {"$set": {"active_case": case_no, "state": "In Session"}})
-    elif action in ["Disposed", "Adj"]:
+    elif action in ["Disposed", "Adj", "Closed"]:
         await db.benches.update_one({"bench_id": bench_id}, {"$set": {"active_case": None}})
 
     return {"status": "success", "action": action, "case_no": case_no}
@@ -254,14 +356,17 @@ async def update_bench_config(payload: dict):
     bench_id = payload.get("bench_id")
     coram = payload.get("coram")
     room_title = payload.get("room_title")
+    commission = payload.get("commission")
 
     if not bench_id or not coram:
-        raise HTTPException(status_code=400, detail="Bench ID and Coram are required.")
+        raise HTTPException(status_code=400, detail="Hall and Coram are required.")
 
     try:
         update_fields = {"coram": coram}
-        if room_title:
+        if room_title is not None:
             update_fields["room_title"] = room_title
+        if commission:
+            update_fields["commission"] = commission
 
         result = await db.benches.update_one(
             {"bench_id": bench_id},
@@ -273,10 +378,84 @@ async def update_bench_config(payload: dict):
 
         return {
             "status": "success", 
-            "message": f"Coram for {bench_id} updated successfully to '{coram}'!"
+            "message": "Hall details updated successfully!"
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+async def _load_matters_or_404(bench_id: str, index: int) -> list:
+    list_doc = await db.cause_lists.find_one({"bench_id": bench_id})
+    matters = list_doc.get("matters", []) if list_doc else []
+    if not 0 <= index < len(matters):
+        raise HTTPException(status_code=404, detail="Matter not found")
+    return matters
+
+
+@app.put("/api/cause-list/{bench_id}/matter/{index}")
+async def edit_matter(bench_id: str, index: int, data: MatterRequest):
+    matters = await _load_matters_or_404(bench_id, index)
+    m = matters[index]
+    old_case_no = m.get("Case No.")
+    m.update({
+        "Case No.": data.case_no,
+        "Case Title & Parties": data.case_title,
+        "Counsels": f"C: {data.complainant_counsel} | R: {data.respondent_counsel}",
+        "Stage": data.stage,
+        "Bench Note": data.bench_note,
+    })
+    await db.cause_lists.update_one({"bench_id": bench_id}, {"$set": {"matters": matters}})
+    # Keep the live display pointing at the renamed case
+    if old_case_no != data.case_no:
+        await db.benches.update_one({"bench_id": bench_id, "active_case": old_case_no}, {"$set": {"active_case": data.case_no}})
+    return {"status": "success", "message": "Matter updated successfully!"}
+
+
+@app.delete("/api/cause-list/{bench_id}/matter/{index}")
+async def delete_matter(bench_id: str, index: int):
+    matters = await _load_matters_or_404(bench_id, index)
+    removed = matters.pop(index)
+    for idx, m in enumerate(matters, start=1):
+        m["Sr No."] = str(idx)
+    await db.cause_lists.update_one({"bench_id": bench_id}, {"$set": {"matters": matters}})
+    await db.benches.update_one({"bench_id": bench_id, "active_case": removed.get("Case No.")}, {"$set": {"active_case": None}})
+    return {"status": "success", "message": "Matter deleted successfully!"}
+
+
+EXPORT_COLUMNS = ["Sr No.", "Case No.", "Case Title & Parties", "Counsels", "Stage", "Status", "Bench Note"]
+
+
+def _export_status(m: dict) -> str:
+    """Status as shown in the Reader Console: an adjourned matter shows its next hearing date."""
+    status = _cell(m.get("Status")) or "Scheduled"
+    next_date = _cell(m.get("Next Date"))
+    if status.lower() == "adjourned" and next_date:
+        return f"Next Hearing: {next_date}"
+    return status
+
+
+@app.get("/api/cause-list/{bench_id}/export")
+async def export_cause_list(bench_id: str):
+    list_doc = await db.cause_lists.find_one({"bench_id": bench_id})
+    matters = list_doc.get("matters", []) if list_doc else []
+    rows = [{**{c: _cell(m.get(c, "")) for c in EXPORT_COLUMNS}, "Status": _export_status(m)} for m in matters]
+    df = pd.DataFrame(rows, columns=EXPORT_COLUMNS)
+
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Cause List")
+        ws = writer.sheets["Cause List"]
+        for col_cells in ws.columns:
+            width = max(len(str(c.value or "")) for c in col_cells)
+            ws.column_dimensions[col_cells[0].column_letter].width = min(max(width + 2, 10), 60)
+    buf.seek(0)
+
+    filename = f"{bench_id}_cause_list_{pd.Timestamp.now():%Y-%m-%d}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
 
 @app.post("/api/cause-list/{bench_id}/add-single")
 async def add_single_matter(bench_id: str, data: MatterRequest):
