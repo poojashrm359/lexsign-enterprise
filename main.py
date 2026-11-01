@@ -205,13 +205,19 @@ def parse_cause_list(raw: pd.DataFrame) -> list:
             rec[field] = f"{rec[field]}{sep}{val}" if field in rec else val
         if not any(rec.get(f) for f in ("Case No.", "Case Title & Parties", "Counsels")):
             continue
+        status, next_date = rec.get("Status") or "Scheduled", ""
+        # A re-uploaded export carries "Next Hearing: DD/MM/YYYY"; store it as a normal adjournment
+        next_hearing = re.match(r"^\s*next\s+hearing\s*:?\s*(.+)$", status, re.IGNORECASE)
+        if next_hearing:
+            status, next_date = "Adjourned", next_hearing.group(1).strip()
         records.append({
             "Sr No.": str(len(records) + 1),  # Auto-managed serial indexing
             "Case No.": rec.get("Case No.", ""),
             "Case Title & Parties": rec.get("Case Title & Parties", ""),
             "Counsels": rec.get("Counsels", ""),
             "Stage": rec.get("Stage", ""),
-            "Status": rec.get("Status") or "Scheduled",
+            "Status": status,
+            "Next Date": next_date,
             "Bench Note": rec.get("Bench Note", ""),
         })
     return records

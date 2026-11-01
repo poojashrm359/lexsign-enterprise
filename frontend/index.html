@@ -766,7 +766,7 @@ body.kiosk-mode #busyOverlay { display: none !important; }
 
                     if (st === 'ACTIVE' || st === 'HEARING') { badgeClass = 'badge-hearing'; rowClass = 'active-row'; }
                     else if (st === 'PASSED OVER') badgeClass = 'badge-passed';
-                    else if (st === 'ADJOURNED') badgeClass = 'badge-adj';
+                    else if (st === 'ADJOURNED' || st.startsWith('NEXT HEARING')) badgeClass = 'badge-adj';
                     else if (st === 'DISPOSED' || st === 'CLOSED') badgeClass = 'badge-disposed';
 
                     let statusText = st === 'ACTIVE' ? 'HEARING' : st;
@@ -1032,7 +1032,7 @@ body.kiosk-mode #busyOverlay { display: none !important; }
         
         if (st === 'ACTIVE' || st === 'HEARING') { badgeClass = 'badge-hearing'; rowClass = 'active-row'; }
         else if (st === 'PASSED OVER') badgeClass = 'badge-passed';
-        else if (st === 'ADJOURNED') badgeClass = 'badge-adj';
+        else if (st === 'ADJOURNED' || st.startsWith('NEXT HEARING')) badgeClass = 'badge-adj';
         else if (st === 'DISPOSED') badgeClass = 'badge-disposed';
 
         html += `<tr class="${rowClass}">
@@ -1121,8 +1121,11 @@ async function loadMasterConsolidatedData() {
         
         if (st === 'ACTIVE' || st === 'HEARING') { badgeClass = 'badge-hearing'; rowClass = 'active-row'; }
         else if (st === 'PASSED OVER') badgeClass = 'badge-passed';
-        else if (st === 'ADJOURNED') badgeClass = 'badge-adj';
-        else if (st === 'DISPOSED') badgeClass = 'badge-disposed';
+        else if (st === 'ADJOURNED' || st.startsWith('NEXT HEARING')) badgeClass = 'badge-adj';
+        else if (st === 'DISPOSED' || st === 'CLOSED') badgeClass = 'badge-disposed';
+
+        let statusText = st === 'ACTIVE' ? 'HEARING' : st;
+        if (st === 'ADJOURNED' && m['Next Date']) statusText = `NEXT HEARING: ${m['Next Date']}`;
 
         html += `<tr class="${rowClass}">
             <td><b><span style="background:#1e293b; padding:3px 6px; border-radius:4px; color:var(--gold); white-space:nowrap;">${m['Hall'] || m['Bench'] || ''}</span></b></td>
@@ -1131,7 +1134,7 @@ async function loadMasterConsolidatedData() {
             <td>${m['Case Title & Parties'] || ''}</td>
             <td>${m['Counsels'] || ''}</td>
             <td>${m['Stage'] || ''}</td>
-            <td><span class="${badgeClass}">${st === 'ACTIVE' ? 'HEARING' : st}</span></td>
+            <td><span class="${badgeClass}" style="white-space:nowrap;">${statusText}</span></td>
         </tr>`;
     });
     html += `</table>`;
@@ -1351,7 +1354,7 @@ if (tickerElem) {
         
         if (st === 'ACTIVE' || st === 'HEARING') { badgeClass = 'badge-hearing'; rowClass = 'active-row'; }
         else if (st === 'PASSED OVER') badgeClass = 'badge-passed';
-        else if (st === 'ADJOURNED') badgeClass = 'badge-adj';
+        else if (st === 'ADJOURNED' || st.startsWith('NEXT HEARING')) badgeClass = 'badge-adj';
         else if (st === 'DISPOSED') badgeClass = 'badge-disposed';
 
         html += `<tr class="${rowClass}">
