@@ -22,7 +22,7 @@ app.add_middleware(
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 INDEX_PATH = os.path.join(BASE_DIR, "frontend", "index.html")
 
-KIOSK_SCREENS = {"court-1", "court-2", "court-3", "court-4", "master-1", "master-2"}
+KIOSK_SCREENS = {"court-1", "court-2", "court-3", "court-4", "master-1", "master-2", "master-3", "master-4"}
 
 
 def serve_index():
@@ -38,7 +38,7 @@ async def read_index():
 
 @app.get("/display/{screen_id}")
 async def kiosk_display(screen_id: str):
-    """Dedicated kiosk URLs for the five registered hallway/court screens."""
+    """Dedicated kiosk URLs for the registered hallway/court and master screens."""
     if screen_id.lower() not in KIOSK_SCREENS:
         raise HTTPException(status_code=404, detail="Unknown display screen")
     return serve_index()
@@ -59,7 +59,7 @@ class CreateUserRequest(BaseModel):
     bench: str = "BENCH-1"
 
 class MatterRequest(BaseModel):
-    sr_no: str
+    sr_no: str = ""  # ignored: serial numbers are assigned automatically
     case_no: str
     case_title: str
     complainant_counsel: str
@@ -85,8 +85,25 @@ async def login(data: LoginRequest):
 async def get_all_users():
     return await db.users.find({}, {"_id": 0, "password": 0}).to_list(100)
 
+async def hall_label(bench_id: str) -> str:
+    """Human-readable hall name for a bench id, e.g. 'BENCH-1' -> 'Hall No. 1'."""
+    if bench_id == "ALL":
+        return "Admin (All Halls)"
+    bench_doc = await db.benches.find_one({"bench_id": bench_id})
+    hall_no = bench_doc.get("hall_no") if bench_doc else None
+    return f"Hall No. {hall_no}" if hall_no else bench_id
+
 @app.post("/api/admin/users")
 async def create_or_update_user(data: CreateUserRequest):
+    # A username belongs to exactly one hall; never silently move it to another hall
+    existing = await db.users.find_one({"username": data.username})
+    if existing and existing.get("bench") != data.bench:
+        assigned_to = await hall_label(existing.get("bench"))
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Username '{data.username}' is already assigned to {assigned_to} ({existing.get('name')}). Please choose a different username."
+        )
+
     # Enforce strictly 1 Reader per Court Room (Bench)
     if data.bench != "ALL":
         existing_bench_user = await db.users.find_one({"bench": data.bench, "username": {"$ne": data.username}})
@@ -94,15 +111,15 @@ async def create_or_update_user(data: CreateUserRequest):
             # Delete/remove the previous reader assigned to this courtroom
             await db.users.delete_one({"username": existing_bench_user["username"]})
 
-    existing = await db.users.find_one({"username": data.username})
     hashed_pwd = pwd_context.hash(data.password)
-    
+    hall = await hall_label(data.bench)
+
     if existing:
         await db.users.update_one({"username": data.username}, {"$set": {"name": data.name, "password": hashed_pwd, "role": data.role, "bench": data.bench}})
-        return {"status": "success", "message": f"User '{data.name}' updated successfully! (Previous courtroom reader replaced if any)"}
+        return {"status": "success", "message": f"User '{data.name}' updated successfully for {hall}!"}
     else:
         await db.users.insert_one({"username": data.username, "password": hashed_pwd, "name": data.name, "role": data.role, "bench": data.bench})
-        return {"status": "success", "message": f"New user '{data.name}' created successfully for {data.bench}!"}
+        return {"status": "success", "message": f"New user '{data.name}' created successfully for {hall}!"}
 
 @app.delete("/api/admin/users/{username}")
 async def delete_user(username: str):
@@ -239,7 +256,7 @@ async def upload_cause_list(bench_id: str = Form(...), file: UploadFile = File(.
             {"$set": {"matters": records, "updated_at": pd.Timestamp.now().isoformat()}},
             upsert=True
         )
-        return {"status": "success", "message": f"Successfully ingested and auto-indexed {len(records)} matters for {bench_id}"}
+        return {"status": "success", "message": f"Successfully ingested and auto-indexed {len(records)} matters for {await hall_label(bench_id)}"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error parsing file: {str(e)}")
 @app.get("/api/cause-list/{bench_id}")
@@ -489,19 +506,3 @@ async def add_single_matter(bench_id: str, data: MatterRequest):
 
     await db.cause_lists.update_one({"bench_id": bench_id}, {"$set": {"matters": matters}}, upsert=True)
     return {"status": "success", "message": "Matter added and auto-indexed successfully!"}
-    list_doc = await db.cause_lists.find_one({"bench_id": bench_id})
-    matters = list_doc.get("matters", []) if list_doc else []
-    
-    new_matter = {
-        "Sr No.": data.sr_no,
-        "Case No.": data.case_no,
-        "Case Title & Parties": data.case_title,
-        "Counsels": f"C: {data.complainant_counsel} | R: {data.respondent_counsel}",
-        "Stage": data.stage,
-        "Status": "Scheduled",
-        "Bench Note": data.bench_note,
-        "Bench": bench_id
-    }
-    matters.append(new_matter)
-    await db.cause_lists.update_one({"bench_id": bench_id}, {"$set": {"matters": matters}}, upsert=True)
-    return {"status": "success", "message": "Matter added successfully!"}

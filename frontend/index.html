@@ -432,7 +432,6 @@ body.kiosk-mode #busyOverlay { display: none !important; }
     <div id="addModal" class="modal-overlay">
         <div class="modal-card">
             <h3 id="addModalTitle" style="color:var(--gold); margin-top:0;">Add New Matter to Cause List</h3>
-            <div class="form-group"><label>Sr No. *</label><input type="text" id="addSrNo" placeholder="6"></div>
             <div class="form-group"><label>Formal Case Number *</label><input type="text" id="addCaseNo" placeholder="CC/2026/109"></div>
             <div class="form-group"><label>Case Title (Parties) *</label><input type="text" id="addCaseTitle" placeholder="Complainant vs. Opposite Party"></div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
@@ -589,7 +588,7 @@ body.kiosk-mode #busyOverlay { display: none !important; }
 
         function getKioskConfig() {
             const path = (window.location.pathname || '').replace(/\/+$/, '');
-            const match = path.match(/\/display\/(court-[1-4]|master-1|master-2)$/i);
+            const match = path.match(/\/display\/(court-[1-4]|master-[1-4])$/i);
             if (!match) return null;
             const screenId = match[1].toLowerCase();
             if (screenId.startsWith('court-')) {
@@ -860,7 +859,7 @@ body.kiosk-mode #busyOverlay { display: none !important; }
         // Index of the matter being edited in the Add Matter modal; null = adding a new one
         let editingMatterIdx = null;
 
-        function setMatterForm(m, srNo) {
+        function setMatterForm(m) {
             // Counsels are stored as "C: <complainant> | R: <respondent>" by Add Matter
             const counsels = m['Counsels'] || '';
             const cr = counsels.match(/^C:\s*(.*?)\s*\|\s*R:\s*(.*)$/);
@@ -868,7 +867,6 @@ body.kiosk-mode #busyOverlay { display: none !important; }
             const stage = m['Stage'] || stageSel.options[0].value;
             if (![...stageSel.options].some(o => o.value === stage)) stageSel.add(new Option(stage, stage));
 
-            document.getElementById('addSrNo').value = srNo;
             document.getElementById('addCaseNo').value = m['Case No.'] || '';
             document.getElementById('addCaseTitle').value = m['Case Title & Parties'] || '';
             document.getElementById('addCompCounsel').value = cr ? cr[1] : counsels;
@@ -879,8 +877,7 @@ body.kiosk-mode #busyOverlay { display: none !important; }
 
         function openAddModal() {
             editingMatterIdx = null;
-            setMatterForm({}, '');
-            document.getElementById('addSrNo').readOnly = false;
+            setMatterForm({});
             document.getElementById('addModalTitle').innerText = 'Add New Matter to Cause List';
             document.getElementById('addModalSubmitBtn').innerText = 'Add to Cause List';
             document.getElementById('addModal').style.display = 'flex';
@@ -890,8 +887,7 @@ body.kiosk-mode #busyOverlay { display: none !important; }
             const m = currentCauseList[idx];
             if (!m) return;
             editingMatterIdx = idx;
-            setMatterForm(m, m['Sr No.'] || String(idx + 1));
-            document.getElementById('addSrNo').readOnly = true;
+            setMatterForm(m);
             document.getElementById('addModalTitle').innerText = 'Edit Matter';
             document.getElementById('addModalSubmitBtn').innerText = 'Save Changes';
             document.getElementById('addModal').style.display = 'flex';
@@ -942,7 +938,6 @@ body.kiosk-mode #busyOverlay { display: none !important; }
             const benchId = document.getElementById('activeBenchSelector').value;
             const isEdit = editingMatterIdx !== null;
             const payload = {
-                sr_no: document.getElementById('addSrNo').value,
                 case_no: document.getElementById('addCaseNo').value,
                 case_title: document.getElementById('addCaseTitle').value,
                 complainant_counsel: document.getElementById('addCompCounsel').value,
@@ -1232,7 +1227,7 @@ function startAutoScroll() {
                 document.getElementById('staffMsg').innerHTML = `<span style="color:var(--green);">${data.message}</span>`;
                 loadAdminUsers();
             } else {
-                document.getElementById('staffMsg').innerHTML = `<span style="color:var(--red);">Error saving user</span>`;
+                document.getElementById('staffMsg').innerHTML = `<span style="color:var(--red);">${data.detail || 'Error saving user'}</span>`;
             }
         }
 
