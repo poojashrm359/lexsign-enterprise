@@ -3,7 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <title>LexSign V3.7 Enterprise - Consumer Courtroom Signage & Hearing Management</title>
+    <script>
+        // Runs before first paint: if a saved session or kiosk URL exists, hide the login
+        // screen up front so a refresh doesn't flash it before the app loads.
+        (function () {
+            var skipLogin = /\/display\/(court-[1-4]|master-[1-4])\/?$/i.test(location.pathname);
+            try { if (localStorage.getItem('user')) skipLogin = true; } catch (e) {}
+            if (skipLogin) document.documentElement.classList.add('skip-login');
+        })();
+    </script>
     <style>
+        html.skip-login #loginView { display: none; }
         :root { --bg: #070a13; --card: #0f172a; --gold: #f59e0b; --text: #f3f4f6; --border: #1e293b; --green: #10b981; --purple: #8b5cf6; --red: #ef4444; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 0; }
         
@@ -147,17 +157,16 @@ body.kiosk-mode #busyOverlay { display: none !important; }
     <div id="loginView" class="login-container">
         <div class="login-card">
             <h2>⚖️ LexSign Enterprise Login</h2>
-            <div class="form-group"><label>Username</label><input type="text" id="username" placeholder="admin or reader1"></div>
+            <div class="form-group"><label>Username</label><input type="text" id="username" placeholder="Enter username"></div>
             <div class="form-group">
                 <label>Password</label>
                 <div class="password-wrapper">
-                    <input type="password" id="password" placeholder="Admin@123">
+                    <input type="password" id="password" placeholder="Enter password">
                     <span class="eye-toggle" onclick="togglePassword('password', this)">👁️</span>
                 </div>
             </div>
             <button class="btn-submit" onclick="handleLogin()">Secure Login</button>
             <div id="errorMsg" class="error-msg"></div>
-            <p style="font-size: 11px; color: #64748b; text-align: center; margin-top: 15px;">Default Admin: <b>admin</b> / <b>Admin@123</b></p>
         </div>
     </div>
 
@@ -340,15 +349,6 @@ body.kiosk-mode #busyOverlay { display: none !important; }
                 <div style="background:#070a13; padding:15px; border-radius:6px; border:1px solid var(--border); margin-bottom:15px;">
                     <h4 style="color:var(--gold); margin-top:0;">Add / Update Staff Account</h4>
                     <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:12px;">
-                        <div class="form-group"><label>Full Name</label><input type="text" id="staffName" placeholder="Sh. Amitabh Kant"></div>
-                        <div class="form-group"><label>Username</label><input type="text" id="staffUsername" placeholder="reader1"></div>
-                        <div class="form-group">
-                            <label>Password</label>
-                            <div class="password-wrapper">
-                                <input type="password" id="staffPassword" placeholder="Reader@123">
-                                <span class="eye-toggle" onclick="togglePassword('staffPassword', this)">👁️</span>
-                            </div>
-                        </div>
                         <div class="form-group">
                             <label>Assigned Hall (1 Reader per Court Hall)</label>
                             <select id="staffBench">
@@ -358,6 +358,15 @@ body.kiosk-mode #busyOverlay { display: none !important; }
                                 <option value="BENCH-4">Hall No. 4 — State Commission (Additional Bench)</option>
                                 <option value="ALL">ALL (Admin Registrar)</option>
                             </select>
+                        </div>
+                        <div class="form-group"><label>Full Name</label><input type="text" id="staffName" placeholder="Sh. Amitabh Kant"></div>
+                        <div class="form-group"><label>Username</label><input type="text" id="staffUsername" placeholder="Enter username"></div>
+                        <div class="form-group">
+                            <label>Password</label>
+                            <div class="password-wrapper">
+                                <input type="password" id="staffPassword" placeholder="Enter password">
+                                <span class="eye-toggle" onclick="togglePassword('staffPassword', this)">👁️</span>
+                            </div>
                         </div>
                     </div>
                     <button class="btn-control" onclick="saveStaffUser()" style="background:var(--gold); color:#000; margin-top:10px;">Save User to Database</button>
@@ -1238,8 +1247,15 @@ function startAutoScroll() {
                 startKiosk(kiosk);
                 return;
             }
-            const user = localStorage.getItem('user');
-            if (user) initApp(JSON.parse(user));
+            try {
+                const user = localStorage.getItem('user');
+                if (user) { initApp(JSON.parse(user)); return; }
+            } catch (e) {
+                try { localStorage.removeItem('user'); } catch (_) {}
+            }
+            // No valid session: make sure the login screen is shown.
+            document.documentElement.classList.remove('skip-login');
+            document.getElementById('loginView').style.display = '';
         };
         // Global trackers for active case chime triggers
 let lastOutsideActiveCase = null;
