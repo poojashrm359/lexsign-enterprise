@@ -103,7 +103,7 @@ In each player's `C:\Tools\LexSign\lexsign-kiosk.cmd` set
 
 ## Troubleshooting
 
-- **`MONGODB CONNECTION FAILED` in `journalctl -u lexsign`** – check `systemctl status mongod`
+- **`DATABASE CONNECTION FAILED` in `journalctl -u lexsign`** – check `systemctl status mongod`
   and that `/etc/lexsign.env` exists. `mongosh "$MONGO_URL" --eval 'db.runCommand({ping:1})'`
   must succeed.
 - **502 from Nginx** – the app is down: `systemctl status lexsign`, then the journal.

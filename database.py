@@ -68,4 +68,4 @@ async def seed_database():
         await ensure_halls()
         print("[OK] Database connected and seeded successfully!")
     except Exception as e:
-        print(f"[ERROR] MONGODB CONNECTION FAILED: {e}")
+        print(f"[ERROR] DATABASE CONNECTION FAILED: {e}")
