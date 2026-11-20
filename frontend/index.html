@@ -84,7 +84,9 @@
         .badge-hearing { background: #f59e0b; color: #000; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: bold; letter-spacing: 0.5px; }
         .badge-scheduled { background: #1e293b; color: #9ca3af; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: bold; border: 1px solid var(--border); }
         .badge-passed { background: #f59e0b20; color: var(--gold); padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
-        .badge-adj { background: #fef9c3; color: #b91c1c; padding: 5px 12px; border-radius: 4px; font-size: 14px; font-weight: 800; letter-spacing: 0.5px; box-shadow: 0 0 10px #fef9c380; }
+        .badge-adj { background: #22d3ee; color: #000; padding: 5px 12px; border-radius: 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; box-shadow: 0 0 10px #22d3ee80; }
+        .badge-adj .adj-label { color: #000; font-size: 11px; font-weight: 700; }
+        .badge-adj .adj-date { color: #dc2626; font-size: 14px; font-weight: 800; background: #fde047; padding: 1px 6px; border-radius: 3px; }
         .badge-disposed { background: #ef444420; color: var(--red); padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
 
         /* Modal */
@@ -163,7 +165,7 @@ body.kiosk-mode.portrait th { font-size: 14px; }
 body.kiosk-mode.portrait td { font-size: 18px; padding: 14px 10px; }
 body.kiosk-mode.portrait .badge-hearing, body.kiosk-mode.portrait .badge-scheduled, body.kiosk-mode.portrait .badge-passed,
 body.kiosk-mode.portrait .badge-disposed { font-size: 14px; }
-body.kiosk-mode.portrait .badge-adj { font-size: 18px; }
+body.kiosk-mode.portrait .badge-adj .adj-date { font-size: 18px; }
 body.kiosk-mode.portrait .ticker-scroll-text { font-size: 22px; }
 body.kiosk-mode.portrait .fixed-bottom-ticker { padding: 14px 20px; }
 
@@ -819,7 +821,7 @@ body.kiosk-mode #busyOverlay { display: none !important; }
                     else if (st === 'DISPOSED' || st === 'CLOSED') badgeClass = 'badge-disposed';
 
                     let statusText = st === 'ACTIVE' ? 'HEARING' : st;
-                    if (st === 'ADJOURNED' && m['Next Date']) statusText = `NEXT HEARING: ${m['Next Date']}`;
+                    if (badgeClass === 'badge-adj') statusText = adjBadgeHtml(st, m['Next Date']);
 
                     html += `<tr class="${rowClass}">
                         <td><b>${m['Sr No.'] || ''}</b></td>
@@ -858,6 +860,14 @@ body.kiosk-mode #busyOverlay { display: none !important; }
                 alert(data.message);
                 loadCauseList(benchId);
             } else { alert("Error uploading file."); }
+        }
+
+        // Build the Next Hearing badge content: black 11px label + red/bold/highlighted 14px date
+        function adjBadgeHtml(st, nextDate) {
+            let date = nextDate;
+            if (st.startsWith('NEXT HEARING')) date = st.split(':').slice(1).join(':').trim() || nextDate;
+            if (!date) return st;
+            return `<span class="adj-label">NEXT HEARING:</span> <span class="adj-date">${date}</span>`;
         }
 
         // Escape a value for use inside a single-quoted JS string in an onclick attribute
@@ -1074,7 +1084,7 @@ body.kiosk-mode #busyOverlay { display: none !important; }
         else if (st === 'DISPOSED' || st === 'CLOSED') badgeClass = 'badge-disposed';
 
         let statusText = st === 'ACTIVE' ? 'HEARING' : st;
-        if (st === 'ADJOURNED' && m['Next Date']) statusText = `NEXT HEARING: ${m['Next Date']}`;
+        if (badgeClass === 'badge-adj') statusText = adjBadgeHtml(st, m['Next Date']);
 
         html += `<tr class="${rowClass}">
             <td><b>${m['Sr No.']}</b></td>
@@ -1164,7 +1174,7 @@ async function loadMasterConsolidatedData() {
         else if (st === 'DISPOSED' || st === 'CLOSED') badgeClass = 'badge-disposed';
 
         let statusText = st === 'ACTIVE' ? 'HEARING' : st;
-        if (st === 'ADJOURNED' && m['Next Date']) statusText = `NEXT HEARING: ${m['Next Date']}`;
+        if (badgeClass === 'badge-adj') statusText = adjBadgeHtml(st, m['Next Date']);
 
         html += `<tr class="${rowClass}">
             <td><b><span style="background:#1e293b; padding:3px 6px; border-radius:4px; color:var(--gold); white-space:nowrap;">${m['Hall'] || m['Bench'] || ''}</span></b></td>
@@ -1395,7 +1405,7 @@ if (tickerElem) {
         else if (st === 'DISPOSED' || st === 'CLOSED') badgeClass = 'badge-disposed';
 
         let statusText = st === 'ACTIVE' ? 'HEARING' : st;
-        if (st === 'ADJOURNED' && m['Next Date']) statusText = `NEXT HEARING: ${m['Next Date']}`;
+        if (badgeClass === 'badge-adj') statusText = adjBadgeHtml(st, m['Next Date']);
 
         html += `<tr class="${rowClass}">
             <td><b>${m['Sr No.']}</b></td>
