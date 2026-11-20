@@ -137,6 +137,43 @@ body.kiosk-mode .top-nav { display: none !important; }
 body.kiosk-mode .app-shell { padding: 12px 16px; max-width: none; }
 body.kiosk-mode #loginView { display: none !important; }
 
+/* ── Kiosk screens fill the whole panel, landscape or portrait ──
+   --kh / --kw are the usable height / width of the panel. They are swapped when the
+   page is rotated with ?rotate=90 or ?rotate=270 (for players whose OS stays landscape). */
+body.kiosk-mode { --kh: 100vh; --kw: 100vw; overflow: hidden; cursor: none; }
+body.kiosk-mode .app-shell { height: var(--kh); box-sizing: border-box; }
+body.kiosk-mode #displayView.active, body.kiosk-mode #masterView.active {
+    display: flex; flex-direction: column; height: calc(var(--kh) - 24px); box-sizing: border-box; padding-bottom: 64px;
+}
+body.kiosk-mode #displayView > .live-control-card:nth-of-type(2),
+body.kiosk-mode #masterView > .live-control-card:nth-of-type(2) {
+    flex: 1; display: flex; flex-direction: column; min-height: 0; margin-bottom: 0;
+}
+body.kiosk-mode #displayView .scrollable-queue, body.kiosk-mode #masterView .scrollable-queue { flex: 1; min-height: 0; max-height: none; }
+body.kiosk-mode .kiosk-hint { display: none; }
+
+/* Portrait (vertical) screens: larger type for distance reading, hall cards in a 2x2 grid */
+body.kiosk-mode.portrait #outsideActiveCase { font-size: 52px; line-height: 1.2; }
+body.kiosk-mode.portrait #outsideCoram { font-size: 20px; }
+body.kiosk-mode.portrait #masterActiveBenchesGrid { grid-template-columns: repeat(2, 1fr) !important; }
+body.kiosk-mode.portrait #masterActiveBenchesGrid h2 { font-size: 24px; }
+body.kiosk-mode.portrait #masterActiveBenchesGrid div, body.kiosk-mode.portrait #masterActiveBenchesGrid span, body.kiosk-mode.portrait #masterActiveBenchesGrid p { font-size: 15px !important; }
+body.kiosk-mode.portrait .live-control-card h3 { font-size: 20px; }
+body.kiosk-mode.portrait th { font-size: 14px; }
+body.kiosk-mode.portrait td { font-size: 18px; padding: 14px 10px; }
+body.kiosk-mode.portrait .badge-hearing, body.kiosk-mode.portrait .badge-scheduled, body.kiosk-mode.portrait .badge-passed,
+body.kiosk-mode.portrait .badge-adj, body.kiosk-mode.portrait .badge-disposed { font-size: 14px; }
+body.kiosk-mode.portrait .ticker-scroll-text { font-size: 22px; }
+body.kiosk-mode.portrait .fixed-bottom-ticker { padding: 14px 20px; }
+
+/* Rotate the whole page when the player's OS cannot be set to portrait: ?rotate=90 (clockwise) or ?rotate=270 */
+body.kiosk-mode.rotate-90, body.kiosk-mode.rotate-270 { --kh: 100vw; --kw: 100vh; }
+body.kiosk-mode.rotate-90 .app-shell, body.kiosk-mode.rotate-270 .app-shell {
+    position: fixed; top: 0; left: 0; width: var(--kw); height: var(--kh); margin: 0; transform-origin: top left;
+}
+body.kiosk-mode.rotate-90 .app-shell { transform: rotate(90deg) translateY(-100%); }
+body.kiosk-mode.rotate-270 .app-shell { transform: rotate(-90deg) translateX(-100%); }
+
 /* Loaders */
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes loaderSlide { 0% { left: -40%; } 100% { left: 100%; } }
@@ -285,7 +322,7 @@ body.kiosk-mode #busyOverlay { display: none !important; }
             <div class="live-control-card">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                     <h3 style="margin:0;">Cause List Queue (Auto-Scrolling)</h3>
-                    <span style="font-size:11px; color:#9ca3af;">💡 Hover over queue anytime to pause and read</span>
+                    <span class="kiosk-hint" style="font-size:11px; color:#9ca3af;">💡 Hover over queue anytime to pause and read</span>
                 </div>
                 <div class="scrollable-queue" id="outsideQueueContainer" onmouseenter="pauseAutoScroll()" onmouseleave="resumeAutoScroll()">
                     <div class="inline-loader"><span class="spinner"></span>Loading queue...</div>
@@ -314,7 +351,7 @@ body.kiosk-mode #busyOverlay { display: none !important; }
             <div class="live-control-card">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                     <h3 style="margin:0;" id="masterTotalMattersHeading">CONSOLIDATED CAUSE LIST — ALL MATTERS (HALL NO. 1–4)</h3>
-                    <span style="font-size:11px; color:#9ca3af;">💡 Hover over table anytime to pause and read</span>
+                    <span class="kiosk-hint" style="font-size:11px; color:#9ca3af;">💡 Hover over table anytime to pause and read</span>
                 </div>
                 <div class="scrollable-queue" id="masterQueueContainer" onmouseenter="pauseAutoScroll()" onmouseleave="resumeAutoScroll()">
                     <div class="inline-loader"><span class="spinner"></span>Loading consolidated master list...</div>
@@ -606,8 +643,23 @@ body.kiosk-mode #busyOverlay { display: none !important; }
             return { mode: 'master', bench: null, screenId };
         }
 
+        // Portrait screens: the CSS keys off body.portrait. It is set when the panel is physically
+        // portrait (OS orientation), or when ?rotate=90 / ?rotate=270 rotates the page on a landscape OS.
+        function applyKioskOrientation() {
+            const rotate = new URLSearchParams(window.location.search).get('rotate');
+            const rotated = rotate === '90' || rotate === '270';
+            if (rotated) document.body.classList.add('rotate-' + rotate);
+            const sync = () => {
+                const physicalPortrait = window.matchMedia('(orientation: portrait)').matches;
+                document.body.classList.toggle('portrait', physicalPortrait !== rotated);
+            };
+            sync();
+            window.addEventListener('resize', sync);
+        }
+
         function startKiosk(config) {
             document.body.classList.add('kiosk-mode');
+            applyKioskOrientation();
             document.getElementById('loginView').style.display = 'none';
             document.getElementById('appView').style.display = 'block';
             if (config.bench) {
@@ -1006,9 +1058,8 @@ body.kiosk-mode #busyOverlay { display: none !important; }
         tickerElem.innerText = bench.ticker_message || "Court in Session. Please check queue for scheduled matters.";
     }
 
-    // 5. Render Queue Table
-    let html = `<div class="scrollable-queue" onmouseenter="pauseAutoScroll()" onmouseleave="resumeAutoScroll()">
-    <table>
+    // 5. Render Queue Table (#outsideQueueContainer is itself the scroll box)
+    let html = `<table>
         <tr>
             <th>Sr.</th>
             <th>Case Number</th>
@@ -1040,7 +1091,7 @@ body.kiosk-mode #busyOverlay { display: none !important; }
             <td><span class="${badgeClass}" style="white-space:nowrap;">${statusText}</span></td>
         </tr>`;
     });
-    html += `</table></div>`;
+    html += `</table>`;
     document.getElementById('outsideQueueContainer').innerHTML = html;
 }
      // 2. Master Display Loader with Auto-Chime across all Benches

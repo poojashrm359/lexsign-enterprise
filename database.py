@@ -66,6 +66,6 @@ async def seed_database():
             await db.users.insert_many(default_users)
 
         await ensure_halls()
-        print("✅ Database connected and seeded successfully!")
+        print("[OK] Database connected and seeded successfully!")
     except Exception as e:
-        print(f"❌ MONGODB CONNECTION FAILED: {e}")
+        print(f"[ERROR] MONGODB CONNECTION FAILED: {e}")
