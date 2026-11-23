@@ -1580,9 +1580,17 @@ async function sendCaseActionToAPI(benchId, caseNo, action, nextDate) {
     }
 }
 
+/** Today's date as YYYY-MM-DD in local time (toISOString would use UTC). */
+function todayIso() {
+    const t = new Date();
+    return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+}
+
 function openAdjModal(benchId, caseNo) {
     pendingAdjCase = { benchId, caseNo };
-    document.getElementById('adjModalDate').value = '';
+    const dateInput = document.getElementById('adjModalDate');
+    dateInput.value = '';
+    dateInput.min = todayIso(); // disable past dates in the picker
     setAdjClosed(false);
     document.getElementById('adjModal').style.display = 'flex';
 }
@@ -1609,6 +1617,9 @@ async function submitAdjModal() {
     if (adjClosedSelected) {
         closeAdjModal();
         await sendCaseActionToAPI(benchId, caseNo, 'Closed');
+    } else if (dateVal && dateVal < todayIso()) {
+        // Typed-in dates can bypass the picker's min, so check again
+        alert('Next Hearing date cannot be in the past.');
     } else if (dateVal) {
         // YYYY-MM-DD -> DD/MM/YYYY
         const [y, mo, d] = dateVal.split('-');
